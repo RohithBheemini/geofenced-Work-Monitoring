@@ -1,0 +1,24 @@
+{
+  "name": "work-monitoring-system",
+  "version": "1.0.0",
+  "description": "Geofenced Workforce Monitoring System with Real-Time Map, Mobile Client, and Continuous Overtime Accrual",
+  "type": "module",
+  "scripts": {
+    "start": "node server/src/index.js",
+    "build": "cd client && npm run build",
+    "server": "cd server && npm start",
+    "client": "cd client && npm run dev",
+    "test": "node --test"
+  },
+  "keywords": [
+    "geofence",
+    "workforce-monitoring",
+    "gps-tracking",
+    "overtime-calculation",
+    "leafet",
+    "timesheet",
+    "mobile-app"
+  ],
+  "author": "Antigravity Engineering Pair",
+  "license": "MIT"
+}
