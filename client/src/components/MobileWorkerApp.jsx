@@ -4,7 +4,7 @@
  * ingress dwell countdown, continuous overtime tracking, and privacy firewalls.
  */
 
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Compass,
   Clock,
@@ -14,15 +14,10 @@ import {
   WifiOff,
   AlertTriangle,
   MapPin,
-  DollarSign,
-  ChevronRight,
-  User,
   HeartPulse,
   Home,
   Navigation,
   CheckCircle,
-  Play,
-  RotateCcw,
 } from 'lucide-react';
 
 export function MobileWorkerApp({
@@ -34,23 +29,16 @@ export function MobileWorkerApp({
   onUpdateStatus = () => {},
   onTriggerSos = () => {},
 }) {
-  const [activeWorkerId, setActiveWorkerId] = useState(
-    selectedWorkerId || (workers[0] ? workers[0].id : '')
-  );
+  const [internalWorkerId, setInternalWorkerId] = useState(null);
   const [isDeadZone, setIsDeadZone] = useState(false);
   const [offlineQueue, setOfflineQueue] = useState([]);
   const [useDeviceGps, setUseDeviceGps] = useState(false);
   const [statusMessage, setStatusMessage] = useState('');
 
+  const activeWorkerId = selectedWorkerId || internalWorkerId || (workers[0] ? workers[0].id : '');
   const worker = workers.find((w) => w.id === activeWorkerId) || workers[0];
   const assignedZone = geofences.find((g) => g.id === worker?.assignedZoneId);
   const ot = worker?.overtime || {};
-
-  useEffect(() => {
-    if (selectedWorkerId) {
-      setActiveWorkerId(selectedWorkerId);
-    }
-  }, [selectedWorkerId]);
 
   // Real device GPS listener
   useEffect(() => {
@@ -85,62 +73,42 @@ export function MobileWorkerApp({
 
   if (!worker) return null;
 
-  // Simulate Walk Inside
-  const handleWalkInside = () => {
+  // Unified Simulate Step (Inside or Outside)
+  const simulateStep = (isInside) => {
     if (!assignedZone) return;
     let targetLat = 37.7749;
     let targetLng = -122.4194;
 
     if (assignedZone.type === 'CIRCULAR') {
-      targetLat = assignedZone.center.latitude + 0.0003;
-      targetLng = assignedZone.center.longitude + 0.0002;
-    } else if (assignedZone.vertices && assignedZone.vertices[0]) {
+      const offset = isInside ? 0.0003 : 0.008;
+      targetLat = assignedZone.center.latitude + offset;
+      targetLng = assignedZone.center.longitude + (isInside ? 0.0002 : 0.008);
+    } else if (isInside && assignedZone.vertices?.[0]) {
       targetLat = assignedZone.vertices[0].latitude;
       targetLng = assignedZone.vertices[0].longitude;
+    } else {
+      targetLat += 0.008;
+      targetLng += 0.008;
     }
 
     const telemetry = {
       latitude: targetLat,
       longitude: targetLng,
-      accuracyMeters: 4.5,
+      accuracyMeters: isInside ? 4.5 : 6.0,
       batteryPercent: worker.batteryPercent,
       timestamp: Date.now(),
     };
 
     if (isDeadZone) {
       setOfflineQueue((prev) => [...prev, telemetry]);
-      setStatusMessage('Fix buffered in offline encrypted queue.');
+      setStatusMessage(isInside ? 'Fix buffered in offline encrypted queue.' : 'Fix buffered in offline queue.');
     } else {
       onSendTelemetry(worker.id, telemetry);
-      setStatusMessage(`Emitted GPS fix inside ${assignedZone.name}.`);
-    }
-  };
-
-  // Simulate Step Outside
-  const handleWalkOutside = () => {
-    if (!assignedZone) return;
-    let targetLat = 37.7749 + 0.008;
-    let targetLng = -122.4194 + 0.008;
-
-    if (assignedZone.type === 'CIRCULAR') {
-      targetLat = assignedZone.center.latitude + 0.008;
-      targetLng = assignedZone.center.longitude + 0.008;
-    }
-
-    const telemetry = {
-      latitude: targetLat,
-      longitude: targetLng,
-      accuracyMeters: 6.0,
-      batteryPercent: worker.batteryPercent,
-      timestamp: Date.now(),
-    };
-
-    if (isDeadZone) {
-      setOfflineQueue((prev) => [...prev, telemetry]);
-      setStatusMessage('Fix buffered in offline queue.');
-    } else {
-      onSendTelemetry(worker.id, telemetry);
-      setStatusMessage(`Emitted GPS fix outside perimeter. Egress grace armed.`);
+      setStatusMessage(
+        isInside
+          ? `Emitted GPS fix inside ${assignedZone.name}.`
+          : 'Emitted GPS fix outside perimeter. Egress grace armed.'
+      );
     }
   };
 
@@ -175,7 +143,7 @@ export function MobileWorkerApp({
 
         {/* Mobile Top Status Bar */}
         <div className="pt-2 px-6 pb-1 flex items-center justify-between text-[11px] text-slate-400 z-20 font-medium">
-          <span>{new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+          <span>09:41</span>
           <div className="flex items-center gap-2">
             {isDeadZone ? (
               <span className="flex items-center gap-1 text-red-400 font-bold text-[10px]">
@@ -199,7 +167,7 @@ export function MobileWorkerApp({
           <select
             value={activeWorkerId}
             onChange={(e) => {
-              setActiveWorkerId(e.target.value);
+              setInternalWorkerId(e.target.value);
               onSelectWorker(e.target.value);
             }}
             className="bg-slate-800 border border-slate-700 text-xs rounded-lg px-2 py-1 text-white font-medium focus:outline-none focus:ring-1 focus:ring-cyan-500"
@@ -354,14 +322,14 @@ export function MobileWorkerApp({
 
             <div className="grid grid-cols-2 gap-2">
               <button
-                onClick={handleWalkInside}
+                onClick={() => simulateStep(true)}
                 className="py-2.5 px-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold flex items-center justify-center gap-1 transition shadow-md"
               >
                 <Compass className="w-3.5 h-3.5" />
                 <span>Walk Inside Site</span>
               </button>
               <button
-                onClick={handleWalkOutside}
+                onClick={() => simulateStep(false)}
                 className="py-2.5 px-2 rounded-xl bg-orange-600 hover:bg-orange-500 text-white text-xs font-semibold flex items-center justify-center gap-1 transition shadow-md"
               >
                 <Navigation className="w-3.5 h-3.5" />

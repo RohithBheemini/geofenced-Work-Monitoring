@@ -10,7 +10,6 @@ import {
   FastForward,
   RotateCcw,
   Zap,
-  Shield,
   AlertTriangle,
   Clock,
   Compass,

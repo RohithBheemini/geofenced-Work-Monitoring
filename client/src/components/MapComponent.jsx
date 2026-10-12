@@ -4,8 +4,17 @@
  * geofence boundaries, and breadcrumb trails.
  */
 
-import React, { useEffect, useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import L from 'leaflet';
+
+const STATUS_STYLES = {
+  EMERGENCY_SOS: { statusClass: 'status-sos', dotColor: 'bg-red-600 animate-ping', label: 'SOS DISTRESS' },
+  OVERTIME_TIER_2: { statusClass: 'status-overtime-2', dotColor: 'bg-red-500', label: 'Tier 2 OT (2.0x)' },
+  OVERTIME_TIER_1: { statusClass: 'status-overtime-1', dotColor: 'bg-amber-500', label: 'Tier 1 OT (1.5x)' },
+  OUT_OF_BOUNDS_WARNING: { statusClass: 'status-out-bounds', dotColor: 'bg-orange-500', label: '' },
+  APPROVED_REMOTE: { statusClass: 'status-remote', dotColor: 'bg-blue-500', label: 'Remote' },
+  IN_TRANSIT: { statusClass: 'status-remote', dotColor: 'bg-cyan-500', label: 'In Transit' },
+};
 
 export function MapComponent({
   workers = [],
@@ -116,36 +125,16 @@ export function MapComponent({
       currentWorkerIds.add(worker.id);
       const { latitude, longitude } = worker.currentLocation;
 
-      // Status ring class
-      let statusClass = 'status-checked-in';
-      let dotColor = 'bg-emerald-500';
-      let labelTag = 'On-Site';
-
-      if (worker.status === 'EMERGENCY_SOS') {
-        statusClass = 'status-sos';
-        dotColor = 'bg-red-600 animate-ping';
-        labelTag = 'SOS DISTRESS';
-      } else if (worker.status === 'OVERTIME_TIER_2') {
-        statusClass = 'status-overtime-2';
-        dotColor = 'bg-red-500';
-        labelTag = 'Tier 2 OT (2.0x)';
-      } else if (worker.status === 'OVERTIME_TIER_1') {
-        statusClass = 'status-overtime-1';
-        dotColor = 'bg-amber-500';
-        labelTag = 'Tier 1 OT (1.5x)';
-      } else if (worker.status === 'OUT_OF_BOUNDS_WARNING') {
-        statusClass = 'status-out-bounds';
-        dotColor = 'bg-orange-500';
-        labelTag = `Grace: ${worker.shift?.egressGraceRemainingSeconds || 300}s`;
-      } else if (worker.status === 'APPROVED_REMOTE') {
-        statusClass = 'status-remote';
-        dotColor = 'bg-blue-500';
-        labelTag = 'Remote';
-      } else if (worker.status === 'IN_TRANSIT') {
-        statusClass = 'status-remote';
-        dotColor = 'bg-cyan-500';
-        labelTag = 'In Transit';
-      }
+      const styleConfig = STATUS_STYLES[worker.status] || {
+        statusClass: 'status-checked-in',
+        dotColor: 'bg-emerald-500',
+        label: 'On-Site',
+      };
+      const statusClass = styleConfig.statusClass;
+      const dotColor = styleConfig.dotColor;
+      const labelTag = worker.status === 'OUT_OF_BOUNDS_WARNING'
+        ? `Grace: ${worker.shift?.egressGraceRemainingSeconds || 300}s`
+        : styleConfig.label;
 
       const isSelected = selectedWorkerId === worker.id;
 

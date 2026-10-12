@@ -4,7 +4,6 @@
  * shift progress gauges, continuous overtime tracking, and manager override actions.
  */
 
-import React from 'react';
 import {
   X,
   Battery,
@@ -13,12 +12,9 @@ import {
   DollarSign,
   Shield,
   AlertTriangle,
-  UserCheck,
   Building,
   Navigation,
-  FileText,
   Phone,
-  PowerOff,
   Home,
   HeartPulse,
 } from 'lucide-react';

@@ -13,7 +13,6 @@ import {
   Info,
   CheckCircle,
   MapPin,
-  Clock,
   X,
   Filter,
 } from 'lucide-react';
@@ -30,8 +29,7 @@ export function AlertCenter({
   const [isMuted, setIsMuted] = useState(soundManager.muted);
 
   const toggleSound = () => {
-    const muted = soundManager.toggleMute();
-    setIsMuted(muted);
+    setIsMuted(soundManager.toggleMute());
   };
 
   const filteredAlerts = alerts.filter((alert) => {
@@ -85,46 +83,19 @@ export function AlertCenter({
       {/* Filter Tabs */}
       <div className="px-4 py-2 bg-slate-950/30 border-b border-slate-800/80 flex items-center gap-2 text-xs">
         <Filter className="w-3.5 h-3.5 text-slate-500" />
-        <button
-          onClick={() => setFilterSeverity('ALL')}
-          className={`px-2 py-0.5 rounded-md font-medium transition ${
-            filterSeverity === 'ALL'
-              ? 'bg-slate-700 text-white font-bold'
-              : 'text-slate-400 hover:text-slate-200'
-          }`}
-        >
-          All ({alerts.length})
-        </button>
-        <button
-          onClick={() => setFilterSeverity('CRITICAL')}
-          className={`px-2 py-0.5 rounded-md font-medium transition ${
-            filterSeverity === 'CRITICAL'
-              ? 'bg-red-500/30 text-red-300 font-bold border border-red-500/40'
-              : 'text-red-400 hover:text-red-300'
-          }`}
-        >
-          Critical
-        </button>
-        <button
-          onClick={() => setFilterSeverity('WARNING')}
-          className={`px-2 py-0.5 rounded-md font-medium transition ${
-            filterSeverity === 'WARNING'
-              ? 'bg-amber-500/30 text-amber-300 font-bold border border-amber-500/40'
-              : 'text-amber-400 hover:text-amber-300'
-          }`}
-        >
-          Warning
-        </button>
-        <button
-          onClick={() => setFilterSeverity('INFO')}
-          className={`px-2 py-0.5 rounded-md font-medium transition ${
-            filterSeverity === 'INFO'
-              ? 'bg-blue-500/30 text-blue-300 font-bold border border-blue-500/40'
-              : 'text-blue-400 hover:text-blue-300'
-          }`}
-        >
-          Info
-        </button>
+        {['ALL', 'CRITICAL', 'WARNING', 'INFO'].map((sev) => (
+          <button
+            key={sev}
+            onClick={() => setFilterSeverity(sev)}
+            className={`px-2 py-0.5 rounded-md font-medium transition ${
+              filterSeverity === sev
+                ? 'bg-slate-700 text-white font-bold'
+                : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            {sev === 'ALL' ? `All (${alerts.length})` : sev.charAt(0) + sev.slice(1).toLowerCase()}
+          </button>
+        ))}
       </div>
 
       {/* Alert Items List */}

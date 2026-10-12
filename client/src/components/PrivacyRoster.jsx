@@ -4,23 +4,11 @@
  * Compliant with GDPR/Labor regulations by maintaining strict privacy isolation.
  */
 
-import React from 'react';
-import {
-  Shield,
-  HeartPulse,
-  Home,
-  Clock,
-  EyeOff,
-  UserCheck,
-  CheckCircle,
-  FileText,
-} from 'lucide-react';
+import { Shield, HeartPulse, Home, EyeOff } from 'lucide-react';
 
 export function PrivacyRoster({
   workers = [],
   onSelectWorker = () => {},
-  onApproveRemote = () => {},
-  onApproveMedical = () => {},
 }) {
   const leaveWorkers = workers.filter(
     (w) =>

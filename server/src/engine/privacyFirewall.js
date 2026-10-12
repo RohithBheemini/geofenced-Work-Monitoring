@@ -1,20 +1,11 @@
 /**
  * @file privacyFirewall.js
  * @description Privacy Firewall & Emergency Isolation Engine.
- * Enforces GDPR/Labor Law compliance by completely scrubbing coordinates for medical leave,
- * obfuscating remote work residential addresses, and handling Emergency Lone-Worker SOS.
+ * Enforces GDPR/Labor Law compliance by scrubbing coordinates for medical leaves
+ * and generating ephemeral micro-geofences for remote workers.
  */
 
-/**
- * Evaluates whether telemetry should be scrubbed or masked based on worker status.
- * 
- * @param {Object} worker
- * @param {Object} rawTelemetry
- * @returns {Object} { scrubbed: boolean, telemetry: Object, privacyNotice?: string }
- */
 export function applyPrivacyFirewall(worker, rawTelemetry) {
-  // 1. Strict Medical Leave Isolation
-  // Hardware-level and server-side coordinate scrubbing
   if (worker.status === 'MEDICAL_LEAVE' || worker.leaveType === 'MEDICAL') {
     return {
       scrubbed: true,
@@ -32,9 +23,6 @@ export function applyPrivacyFirewall(worker, rawTelemetry) {
     };
   }
 
-  // 2. Approved Remote Work: Ephemeral Micro-Geofence
-  // To protect employee residential privacy from broad operations dispatch,
-  // we fuzz coordinates slightly (within ~50m) or flag as remote-verified.
   if (worker.status === 'APPROVED_REMOTE' || worker.shiftType === 'REMOTE') {
     return {
       scrubbed: false,
@@ -48,23 +36,38 @@ export function applyPrivacyFirewall(worker, rawTelemetry) {
     };
   }
 
-  // 3. Standard on-duty telemetry
-  return {
-    scrubbed: false,
-    telemetry: rawTelemetry,
-  };
+  return { scrubbed: false, telemetry: rawTelemetry };
 }
 
-/**
- * Creates an ephemeral circular geofence around an approved remote worker's home/satellite coordinate.
- */
+export function sanitizeWorkers(workers) {
+  const now = Date.now();
+  return workers.map((worker) => {
+    const firewall = applyPrivacyFirewall(worker, {
+      latitude: worker.currentLocation?.latitude ?? null,
+      longitude: worker.currentLocation?.longitude ?? null,
+      accuracyMeters: worker.gpsAccuracy,
+      batteryPercent: worker.batteryPercent,
+      timestamp: now,
+    });
+
+    return {
+      ...worker,
+      currentLocation: firewall.telemetry.latitude != null
+        ? { latitude: firewall.telemetry.latitude, longitude: firewall.telemetry.longitude }
+        : null,
+      isMasked: firewall.scrubbed,
+      privacyNotice: firewall.privacyNotice,
+    };
+  });
+}
+
 export function createEphemeralRemoteZone(workerId, address, lat, lng) {
   return {
     id: `remote-zone-${workerId}`,
     type: 'CIRCULAR',
     name: `Remote Hub: ${address || 'Authorized Remote Site'}`,
     center: { latitude: lat, longitude: lng },
-    radiusMeters: 150, // 150m residential micro-perimeter
+    radiusMeters: 150,
     bufferMeters: 25,
     isEphemeral: true,
     workerId,

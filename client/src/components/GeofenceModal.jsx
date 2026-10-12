@@ -4,7 +4,7 @@
  */
 
 import React, { useState } from 'react';
-import { X, Plus, MapPin, Building, Shield } from 'lucide-react';
+import { X, Plus, Building } from 'lucide-react';
 
 export function GeofenceModal({
   isOpen = false,

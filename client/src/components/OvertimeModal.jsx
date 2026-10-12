@@ -4,17 +4,12 @@
  * Calculates multi-tier overtime liability, rate multipliers, and CSV export.
  */
 
-import React from 'react';
-import {
-  X,
-  DollarSign,
-  Download,
-  Clock,
-  TrendingUp,
-  FileSpreadsheet,
-  CheckCircle2,
-  ShieldAlert,
-} from 'lucide-react';
+import { X, DollarSign, Download } from 'lucide-react';
+
+function getExportFilename() {
+  const d = new Date();
+  return `GWMS_Overtime_Timesheet_${d.toISOString().slice(0, 10)}.csv`;
+}
 
 export function OvertimeModal({
   isOpen = false,
@@ -22,12 +17,6 @@ export function OvertimeModal({
   workers = [],
 }) {
   if (!isOpen) return null;
-
-  // Aggregate metrics
-  let totalGrossPayroll = 0;
-  let totalOvertimeLiability = 0;
-  let totalOvertimeHours = 0;
-  let totalRegularHours = 0;
 
   const rows = workers.map((worker) => {
     const ot = worker.overtime || {};
@@ -37,25 +26,28 @@ export function OvertimeModal({
     const nightHours = (ot.nightDiffDurationSeconds || 0) / 3600;
     const totalHours = regHours + ot1Hours + ot2Hours;
 
-    totalRegularHours += regHours;
-    totalOvertimeHours += ot1Hours + ot2Hours;
-    totalGrossPayroll += ot.totalPay || 0;
-    totalOvertimeLiability += ot.overtimeExtraPay || 0;
-
     return {
       worker,
+      regHoursNum: regHours,
+      otHoursNum: ot1Hours + ot2Hours,
       regHours: regHours.toFixed(2),
       ot1Hours: ot1Hours.toFixed(2),
       ot2Hours: ot2Hours.toFixed(2),
       nightHours: nightHours.toFixed(2),
       totalHours: totalHours.toFixed(2),
       regularPay: (ot.regularPay || 0).toFixed(2),
+      overtimeExtraPayNum: ot.overtimeExtraPay || 0,
       overtimeExtraPay: (ot.overtimeExtraPay || 0).toFixed(2),
+      totalPayNum: ot.totalPay || 0,
       totalPay: (ot.totalPay || 0).toFixed(2),
-      multiplier: ot.currentTierMultiplier || 1.0,
       overtimeActive: ot.overtimeActive,
     };
   });
+
+  const totalRegularHours = rows.reduce((acc, r) => acc + r.regHoursNum, 0);
+  const totalOvertimeHours = rows.reduce((acc, r) => acc + r.otHoursNum, 0);
+  const totalGrossPayroll = rows.reduce((acc, r) => acc + r.totalPayNum, 0);
+  const totalOvertimeLiability = rows.reduce((acc, r) => acc + r.overtimeExtraPayNum, 0);
 
   const exportCsv = () => {
     const headers = [
@@ -102,7 +94,7 @@ export function OvertimeModal({
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.setAttribute('href', url);
-    link.setAttribute('download', `GWMS_Overtime_Timesheet_${new Date().toISOString().slice(0, 10)}.csv`);
+    link.setAttribute('download', getExportFilename());
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -194,7 +186,7 @@ export function OvertimeModal({
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800/60">
-              {rows.map(({ worker, regHours, ot1Hours, ot2Hours, nightHours, totalHours, regularPay, overtimeExtraPay, totalPay, multiplier, overtimeActive }) => (
+              {rows.map(({ worker, regHours, ot1Hours, ot2Hours, nightHours, totalHours, regularPay, overtimeExtraPay, totalPay, overtimeActive }) => (
                 <tr key={worker.id} className="hover:bg-slate-800/30 transition">
                   <td className="py-3 px-3">
                     <div className="flex items-center gap-2.5">

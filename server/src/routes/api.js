@@ -5,42 +5,20 @@
 
 import express from 'express';
 import { calculateOvertime } from '../engine/overtimeEngine.js';
-import { applyPrivacyFirewall, createEphemeralRemoteZone } from '../engine/privacyFirewall.js';
+import { sanitizeWorkers, createEphemeralRemoteZone } from '../engine/privacyFirewall.js';
 import { INITIAL_WORKERS, INITIAL_GEOFENCES, INITIAL_ALERTS } from '../data/seedData.js';
 
 export function createApiRouter(workers, geofences, alerts, simulator) {
   const router = express.Router();
 
-  // 1. Get Workers
+  // 1. Get Workers (Sanitized with privacy firewall)
   router.get('/workers', (req, res) => {
-    const sanitized = workers.map((worker) => {
-      const firewall = applyPrivacyFirewall(worker, {
-        latitude: worker.currentLocation ? worker.currentLocation.latitude : null,
-        longitude: worker.currentLocation ? worker.currentLocation.longitude : null,
-        accuracyMeters: worker.gpsAccuracy,
-        batteryPercent: worker.batteryPercent,
-        timestamp: Date.now(),
-      });
-
-      return {
-        ...worker,
-        currentLocation: firewall.telemetry.latitude
-          ? { latitude: firewall.telemetry.latitude, longitude: firewall.telemetry.longitude }
-          : null,
-        isMasked: firewall.scrubbed,
-        privacyNotice: firewall.privacyNotice,
-      };
-    });
-
-    res.json({ success: true, workers: sanitized });
+    res.json({ success: true, workers: sanitizeWorkers(workers) });
   });
 
-  // 2. Get Geofences
-  router.get('/geofences', (req, res) => {
-    res.json({ success: true, geofences });
-  });
+  // 2. Geofences
+  router.get('/geofences', (req, res) => res.json({ success: true, geofences }));
 
-  // 3. Create Geofence
   router.post('/geofences', (req, res) => {
     const { name, type = 'CIRCULAR', center, radiusMeters = 200, bufferMeters = 30, color = '#3B82F6', vertices } = req.body;
     if (!name) return res.status(400).json({ success: false, error: 'Name is required' });
@@ -56,55 +34,42 @@ export function createApiRouter(workers, geofences, alerts, simulator) {
       vertices: vertices || [],
       headcountTarget: 2,
     };
-
     geofences.push(newZone);
     simulator.broadcastState();
     res.json({ success: true, geofence: newZone });
   });
 
-  // 4. Get Alerts
-  router.get('/alerts', (req, res) => {
-    res.json({ success: true, alerts });
-  });
+  // 3. Alerts
+  router.get('/alerts', (req, res) => res.json({ success: true, alerts }));
 
-  // 5. Acknowledge Alert
   router.post('/alerts/:id/ack', (req, res) => {
     const alert = alerts.find((a) => a.id === req.params.id);
-    if (alert) {
-      alert.acknowledged = true;
-      simulator.broadcastState();
-      return res.json({ success: true, alert });
-    }
-    res.status(404).json({ success: false, error: 'Alert not found' });
+    if (!alert) return res.status(404).json({ success: false, error: 'Alert not found' });
+    alert.acknowledged = true;
+    simulator.broadcastState();
+    res.json({ success: true, alert });
   });
 
-  // 6. Ingest Telemetry from Mobile Client
+  // 4. Telemetry Ingest
   router.post('/telemetry/ingest', (req, res) => {
     const { workerId, telemetry } = req.body;
-    if (!workerId || !telemetry) {
-      return res.status(400).json({ success: false, error: 'Missing workerId or telemetry' });
-    }
-
-    const result = simulator.ingestTelemetry(workerId, telemetry);
-    res.json(result);
+    if (!workerId || !telemetry) return res.status(400).json({ success: false, error: 'Missing workerId or telemetry' });
+    res.json(simulator.ingestTelemetry(workerId, telemetry));
   });
 
-  // 7. Update Worker Status / Leave / Shift Override
+  // 5. Worker Status / Leave Override
   router.post('/workers/:id/status', (req, res) => {
     const worker = workers.find((w) => w.id === req.params.id);
     if (!worker) return res.status(404).json({ success: false, error: 'Worker not found' });
 
     const { status, leaveType, assignedZoneId } = req.body;
-
     if (status) worker.status = status;
     if (leaveType !== undefined) worker.leaveType = leaveType;
     if (assignedZoneId) worker.assignedZoneId = assignedZoneId;
 
     if (leaveType === 'MEDICAL' || status === 'MEDICAL_LEAVE') {
-      worker.status = 'MEDICAL_LEAVE';
-      worker.leaveType = 'MEDICAL';
-      worker.currentLocation = null;
-      worker.shift.isFormallyCheckedIn = false;
+      Object.assign(worker, { status: 'MEDICAL_LEAVE', leaveType: 'MEDICAL', currentLocation: null });
+      if (worker.shift) worker.shift.isFormallyCheckedIn = false;
       simulator.emitAlert({
         workerId: worker.id,
         workerName: worker.name,
@@ -114,13 +79,10 @@ export function createApiRouter(workers, geofences, alerts, simulator) {
         message: `Medical leave updated for ${worker.name}. Privacy firewall active: GPS stripped.`,
       });
     } else if (leaveType === 'REMOTE' || status === 'APPROVED_REMOTE') {
-      worker.status = 'APPROVED_REMOTE';
-      worker.leaveType = 'REMOTE';
+      Object.assign(worker, { status: 'APPROVED_REMOTE', leaveType: 'REMOTE' });
       const remoteZone = createEphemeralRemoteZone(worker.id, 'Remote Home Office', 37.7780, -122.4500);
       worker.assignedZoneId = remoteZone.id;
-      if (!geofences.find((g) => g.id === remoteZone.id)) {
-        geofences.push(remoteZone);
-      }
+      if (!geofences.find((g) => g.id === remoteZone.id)) geofences.push(remoteZone);
       simulator.emitAlert({
         workerId: worker.id,
         workerName: worker.name,
@@ -135,7 +97,7 @@ export function createApiRouter(workers, geofences, alerts, simulator) {
     res.json({ success: true, worker });
   });
 
-  // 8. Trigger Emergency SOS
+  // 6. Emergency SOS
   router.post('/workers/:id/sos', (req, res) => {
     const worker = workers.find((w) => w.id === req.params.id);
     if (!worker) return res.status(404).json({ success: false, error: 'Worker not found' });
@@ -149,64 +111,41 @@ export function createApiRouter(workers, geofences, alerts, simulator) {
       severity: 'CRITICAL',
       message: `DISTRESS ALERT: Lone worker emergency beacon triggered by ${worker.name}! Dispatching emergency personnel.`,
     });
-
     simulator.broadcastState();
     res.json({ success: true, worker });
   });
 
-  // 9. Simulation Controls
+  // 7. Simulation Controls
   router.post('/simulation/scenario', (req, res) => {
-    const { scenario } = req.body;
-    simulator.runScenario(scenario);
-    res.json({ success: true, scenario });
+    simulator.runScenario(req.body.scenario);
+    res.json({ success: true, scenario: req.body.scenario });
   });
 
   router.post('/simulation/speed', (req, res) => {
-    const { speed } = req.body;
-    simulator.setSpeed(Number(speed));
+    simulator.setSpeed(Number(req.body.speed));
     res.json({ success: true, speed: simulator.simulationSpeed });
   });
 
   router.post('/simulation/reset', (req, res) => {
-    // Reset to deep clone of initial seeds
     workers.length = 0;
     INITIAL_WORKERS.forEach((w) => workers.push(JSON.parse(JSON.stringify(w))));
-
     geofences.length = 0;
     INITIAL_GEOFENCES.forEach((g) => geofences.push(JSON.parse(JSON.stringify(g))));
-
     alerts.length = 0;
     INITIAL_ALERTS.forEach((a) => alerts.push(JSON.parse(JSON.stringify(a))));
-
     simulator.broadcastState();
     res.json({ success: true, message: 'Simulation reset to baseline' });
   });
 
-  // 10. Comprehensive Timesheet & Overtime Report
+  // 8. Timesheet & Overtime Report
   router.get('/reports/timesheet', (req, res) => {
+    const now = Date.now();
     const report = workers.map((worker) => {
-      let ot = {
-        totalDurationSeconds: 0,
-        regularDurationSeconds: 0,
-        tier1OtDurationSeconds: 0,
-        tier2OtDurationSeconds: 0,
-        nightDiffDurationSeconds: 0,
-        regularPay: 0,
-        tier1OtPay: 0,
-        tier2OtPay: 0,
-        nightDiffPay: 0,
-        totalPay: 0,
-        overtimeExtraPay: 0,
-        currentTierMultiplier: 1.0,
-      };
-
-      if (worker.shift && worker.shift.checkInTime) {
-        ot = calculateOvertime({
-          checkInTimeMs: worker.shift.checkInTime,
-          checkOutTimeMs: worker.shift.checkOutTime || Date.now(),
-          baseHourlyWage: worker.baseWage,
-        });
-      }
+      const ot = calculateOvertime({
+        checkInTimeMs: worker.shift?.checkInTime,
+        checkOutTimeMs: worker.shift?.checkOutTime || now,
+        baseHourlyWage: worker.baseWage,
+      });
 
       return {
         id: worker.id,
@@ -215,8 +154,8 @@ export function createApiRouter(workers, geofences, alerts, simulator) {
         department: worker.department,
         baseWage: worker.baseWage,
         status: worker.status,
-        shiftScheduled: `${worker.shift.scheduledStart} - ${worker.shift.scheduledEnd}`,
-        checkInTime: worker.shift.checkInTime ? new Date(worker.shift.checkInTime).toLocaleTimeString() : 'N/A',
+        shiftScheduled: `${worker.shift?.scheduledStart || '08:00'} - ${worker.shift?.scheduledEnd || '16:00'}`,
+        checkInTime: worker.shift?.checkInTime ? new Date(worker.shift.checkInTime).toLocaleTimeString() : 'N/A',
         totalHours: (ot.totalDurationSeconds / 3600).toFixed(2),
         regularHours: (ot.regularDurationSeconds / 3600).toFixed(2),
         tier1OtHours: (ot.tier1OtDurationSeconds / 3600).toFixed(2),
@@ -228,7 +167,6 @@ export function createApiRouter(workers, geofences, alerts, simulator) {
         multiplier: ot.currentTierMultiplier,
       };
     });
-
     res.json({ success: true, report });
   });
 

@@ -4,28 +4,18 @@
  * Live Leaflet Map, Mobile Field Worker simulator, Overtime audits, and Alert feeds.
  */
 
-import React, { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import io from 'socket.io-client';
 import {
   MapPin,
   Smartphone,
   Shield,
   Bell,
-  Clock,
   DollarSign,
   Plus,
   Play,
-  RotateCcw,
-  Users,
   Compass,
-  AlertTriangle,
   FileSpreadsheet,
-  Layers,
-  HeartPulse,
-  Home,
-  CheckCircle,
-  Activity,
-  Wifi,
 } from 'lucide-react';
 
 import { MapComponent } from './components/MapComponent.jsx';
